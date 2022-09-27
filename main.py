@@ -1,8 +1,12 @@
+from email.mime.text import MIMEText
+import smtplib
+import sys
 import os
 import requests
 import codecs
 
 from bs4 import BeautifulSoup
+from smtplib import SMTP
 
 
 file_name = 'data.txt'
@@ -16,6 +20,8 @@ header = {
 
 def get_response(url):
     tasks_response = requests.get(url, headers=header)
+    if tasks_response.status_code != 200:
+        raise Exception(f'HTTP ERROR {tasks_response.status_code}')
     return tasks_response
 
 
@@ -112,16 +118,26 @@ def get_task_column(list_item):
     return task_column
 
 
-def parse_tasks():
+def is_have_one_of_tags(list_item, tags):
+    for tag in tags:
+        task_tags = list_item.find(
+            'ul', attrs={'class': 'tags tags_short'}).findAll('li')
+        for task_tag in task_tags:
+            if tag in task_tag.text:
+                return True
+    return False
+
+
+def parse_tasks(filter_tags):
     try:
         os.remove(file_name)
     except OSError:
         pass
     tasks_response = get_response(get_tasks_url)
-    if tasks_response.status_code != 200:
-        return
     list_items = get_list_items(tasks_response)
     for list_item in list_items:
+        if not is_have_one_of_tags(list_item, filter_tags):
+            continue
         print_task_text(list_item)
         print_task_link(list_item)
         print_description(list_item)
@@ -132,4 +148,23 @@ def parse_tasks():
         print_separator()
 
 
-parse_tasks()
+def send_mail():
+    with open(file_name, 'rb') as fp:
+        msg = MIMEText(fp.read)
+    msg['Subject'] = f'The contents of {file_name}'
+    me = 'test'
+    you = 'nklnsk708@gmail.com'
+    msg['From'] = me
+    msg['To'] = you
+    s = smtplib.SMTP('localhost')
+    s.sendmail(me, [you], 'msg.as_string()')
+    s.quit
+
+def main(argv):
+    tags = argv[1:]
+    send_mail()
+    #parse_tasks(tags)
+
+
+if __name__ == '__main__':
+    main(sys.argv)
